@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Generador paramétrico de objetos decorativos para impresión 3D: jarrones, macetas, portavelas, posavasos y paneles. Exporta STL." />
+    <title>Deco STL</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 2h6v2c0 1.5 4 3.5 4 9s-2.5 9-4 9H9c-1.5 0-4-3.5-4-9s4-7.5 4-9z' fill='%23c46a4a'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="panel">
+        <header class="brand">
+          <h1>Deco<span>·</span>STL</h1>
+          <p>Diseñá objetos decorativos y descargalos listos para imprimir.</p>
+        </header>
+
+        <nav id="generators" class="generators" aria-label="Tipo de objeto"></nav>
+
+        <section class="block">
+          <h2>Estilos</h2>
+          <div id="presets" class="chips"></div>
+        </section>
+
+        <form id="params" class="params" autocomplete="off"></form>
+
+        <section class="block">
+          <h2>Color de vista previa</h2>
+          <div id="colors" class="swatches"></div>
+        </section>
+      </aside>
+
+      <main class="stage">
+        <div id="viewport" class="viewport"></div>
+        <div class="toolbar">
+          <button id="random" type="button" class="btn">Sorprendeme</button>
+          <button id="reset" type="button" class="btn">Restablecer</button>
+          <button id="share" type="button" class="btn">Copiar enlace</button>
+          <button id="download" type="button" class="btn primary">Descargar STL</button>
+        </div>
+        <div id="stats" class="stats" aria-live="polite"></div>
+        <div id="toast" class="toast" role="status"></div>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
