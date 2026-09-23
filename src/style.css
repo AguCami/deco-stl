@@ -159,7 +159,16 @@ input[type='range']::-moz-range-thumb {
   border: 2px solid var(--accent);
   cursor: pointer;
 }
-.field-select { display: grid; gap: 4px; }
+.field-select, .field-text { display: grid; gap: 4px; }
+.field-text input, .field-text textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--field);
+  resize: vertical;
+}
+.field-text input:focus, .field-text textarea:focus { outline: none; border-color: var(--accent); }
 select {
   width: 100%;
   padding: 7px 10px;
@@ -236,6 +245,19 @@ select {
   border-radius: 10px;
   background: var(--warn-bg);
   color: var(--warn-ink);
+}
+
+.stage.busy .viewport::after {
+  content: 'Generando…';
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 
 .toast {

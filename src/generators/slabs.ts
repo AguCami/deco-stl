@@ -1,5 +1,6 @@
 import { buildPolarSlab, buildRectSlab } from '../geometry/slab';
 import { polygonFactor, segmentsFor } from '../geometry/profile';
+import { flatText, textParams } from './text';
 import { reader, type Generator } from './types';
 
 const TAU = Math.PI * 2;
@@ -66,12 +67,14 @@ export const coaster: Generator = {
     { key: 'relief', label: 'Altura del relieve', group: 'Relieve', type: 'range', min: 0.4, max: 5, step: 0.1, default: 1.4, unit: 'mm' },
     { key: 'rim', label: 'Ancho del borde', group: 'Relieve', type: 'range', min: 0, max: 12, step: 0.5, default: 4, unit: 'mm' },
     { key: 'rimHeight', label: 'Altura del borde', group: 'Relieve', type: 'range', min: 0, max: 6, step: 0.1, default: 2, unit: 'mm' },
+    ...textParams({ size: 12, maxSize: 40, depth: 1.5 }),
   ],
   presets: [
     { name: 'Mandala', values: { pattern: 'mandala', count: 16, shape: '0' } },
     { name: 'Hexágono flor', values: { pattern: 'flower', count: 12, shape: '6' } },
     { name: 'Sol', values: { pattern: 'sunburst', count: 24, shape: '0', relief: 1.2 } },
     { name: 'Plato ondas', values: { pattern: 'ripple', count: 10, diameter: 160, rim: 8, rimHeight: 5, relief: 1 } },
+    { name: 'Con nombre', values: { pattern: 'rings', count: 12, relief: 0.8, text: 'Café', font: 'pacifico', textSize: 16, textDepth: 1.6 } },
   ],
   build(v) {
     const { num, str } = reader(v);
@@ -85,7 +88,7 @@ export const coaster: Generator = {
     const pattern = POLAR[str('pattern')] ?? POLAR.mandala;
     // Los polígonos se orientan con un lado horizontal.
     const rot = sides >= 3 ? Math.PI / sides : 0;
-    return buildPolarSlab({
+    const slab = buildPolarSlab({
       radius: (t) => R * polygonFactor(sides, t, rot),
       segments: segmentsFor(360, sides),
       rings: Math.round(R * 2),
@@ -98,6 +101,8 @@ export const coaster: Generator = {
         return base + design * (1 - inRim) + rimH * inRim;
       },
     });
+    const inner = 2 * (R * (sides >= 3 ? Math.cos(Math.PI / sides) : 1) - rimW);
+    return flatText(slab, v, { top: base + relief, floor: base, maxWidth: inner * 0.8, maxHeight: inner * 0.6 });
   },
 };
 
@@ -156,6 +161,7 @@ export const wallPanel: Generator = {
     { key: 'cells', label: 'Celdas por lado', group: 'Relieve', type: 'range', min: 1, max: 16, step: 1, default: 5 },
     { key: 'relief', label: 'Altura del relieve', group: 'Relieve', type: 'range', min: 0.5, max: 25, step: 0.5, default: 8, unit: 'mm' },
     { key: 'frame', label: 'Marco', group: 'Relieve', type: 'range', min: 0, max: 15, step: 0.5, default: 0, unit: 'mm' },
+    ...textParams({ size: 20, maxSize: 80, depth: 2 }),
     {
       key: 'res', label: 'Resolución', group: 'Impresión', type: 'select', default: '0.75', fixed: true,
       options: [
@@ -181,7 +187,7 @@ export const wallPanel: Generator = {
     const cell = W / num('cells');
     const pattern = PANEL[str('pattern')] ?? PANEL.hexagons;
     const centered = str('pattern') === 'ripple';
-    return buildRectSlab({
+    const slab = buildRectSlab({
       width: W,
       depth: D,
       step: Number(str('res')) || 1,
@@ -195,5 +201,6 @@ export const wallPanel: Generator = {
         return base + h * (1 - inFrame) + relief * inFrame;
       },
     });
+    return flatText(slab, v, { top: base + relief, floor: base, maxWidth: W - 2 * frame - 10, maxHeight: D - 2 * frame - 10 });
   },
 };

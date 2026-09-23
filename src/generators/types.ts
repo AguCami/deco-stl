@@ -30,7 +30,16 @@ export interface ToggleParam extends BaseParam {
   default: boolean;
 }
 
-export type Param = RangeParam | SelectParam | ToggleParam;
+export interface TextParam extends BaseParam {
+  type: 'text';
+  default: string;
+  maxLength: number;
+  placeholder?: string;
+  /** Permite varias líneas. */
+  multiline?: boolean;
+}
+
+export type Param = RangeParam | SelectParam | ToggleParam | TextParam;
 export type Values = Record<string, number | string | boolean>;
 
 export interface Preset {
@@ -44,7 +53,8 @@ export interface Generator {
   description: string;
   params: Param[];
   presets: Preset[];
-  build(values: Values): MeshData;
+  /** Puede ser asíncrono: el texto y las booleanas cargan recursos (fuentes, WASM). */
+  build(values: Values): MeshData | Promise<MeshData>;
 }
 
 export function defaults(g: Generator): Values {
@@ -62,6 +72,8 @@ export function sanitize(g: Generator, input: Values): Values {
       out[p.key] = v;
     } else if (p.type === 'toggle' && typeof v === 'boolean') {
       out[p.key] = v;
+    } else if (p.type === 'text' && typeof v === 'string') {
+      out[p.key] = (p.multiline ? v : v.replace(/\n/g, ' ')).slice(0, p.maxLength);
     }
   }
   return out;

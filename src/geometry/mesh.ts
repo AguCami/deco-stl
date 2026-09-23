@@ -96,7 +96,9 @@ export function analyze(mesh: MeshData): MeshStats {
   }
 
   const bedZ = min[2] + 0.01;
-  const cos45 = Math.SQRT1_2;
+  // Voladizo medido desde la vertical: la normal apunta hacia abajo con nz < -sin(α).
+  // Un grado de tolerancia para que los biseles de 45° exactos no cuenten.
+  const limit = Math.sin((46 * Math.PI) / 180);
   let volume = 0;
   let area = 0;
   let overhangArea = 0;
@@ -114,7 +116,7 @@ export function analyze(mesh: MeshData): MeshStats {
     const triArea = len / 2;
     area += triArea;
     const onBed = az < bedZ && bz < bedZ && cz < bedZ;
-    if (!onBed && len > 0 && nz / len < -cos45) overhangArea += triArea;
+    if (!onBed && len > 0 && nz / len < -limit) overhangArea += triArea;
   }
 
   return {

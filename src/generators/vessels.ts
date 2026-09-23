@@ -1,5 +1,6 @@
-import { buildShell } from '../geometry/shell';
-import { SURFACE_PATTERNS, segmentsFor, smoothProfile, styleRadius, type SurfacePattern } from '../geometry/profile';
+import { buildShell, type RadiusFn, type ShellOptions } from '../geometry/shell';
+import { SURFACE_PATTERNS, polygonFactor, segmentsFor, smoothProfile, styleRadius, type SurfacePattern } from '../geometry/profile';
+import { textParams, wrapText } from './text';
 import { reader, type Generator, type Param, type Values } from './types';
 
 const RESOLUTION: Param = {
@@ -83,13 +84,40 @@ function vesselRadius(v: Values) {
   });
   const res = RES[str('res') as keyof typeof RES] ?? RES.medium;
   const twist = (num('twist') * Math.PI) / 180;
+  const sides = num('sides');
   return {
     radius,
+    /** Superficie sin textura, donde se apoya el texto. */
+    surface: (t: number, theta: number) => profile(t) * polygonFactor(sides, theta - twist * t),
+    texture: str('pattern') === 'none' ? 0 : Math.max(0, num('depth')),
     segments: segmentsFor(res.segments, num('sides')),
     rows: res.rows,
     phase: (t: number) => twist * t,
   };
 }
+
+type Shape = ReturnType<typeof vesselRadius>;
+type ShellExtras = Omit<ShellOptions, 'height' | 'segments' | 'rows' | 'phase' | 'outer'> & { outer?: RadiusFn };
+
+/** Construye el recipiente y le suma (o graba) el texto, si hay. */
+function vessel(v: Values, extras: (shape: Shape) => ShellExtras, textWall: number) {
+  const H = reader(v).num('height');
+  const shape = vesselRadius(v);
+  const { outer, ...rest } = extras(shape);
+  const mesh = buildShell({ height: H, segments: shape.segments, rows: shape.rows, phase: shape.phase, outer: outer ?? shape.radius, ...rest });
+  const floor = rest.openBottom ? 0 : rest.base;
+  return wrapText(mesh, v, {
+    height: H,
+    // Si la silueta se ajustó (p. ej. mínimo alrededor de la vela), el texto la sigue.
+    surface: outer ? (t, a) => Math.max(shape.surface(t, a), outer(t, a) - shape.texture) : shape.surface,
+    texture: shape.texture,
+    wall: textWall,
+    zMin: Math.max(2, Math.min(floor, H / 3)),
+    zMax: H - 2,
+  });
+}
+
+const TEXT = textParams({ size: 14, depth: 1.2, position: true });
 
 export const vase: Generator = {
   id: 'vase',
@@ -101,6 +129,7 @@ export const vase: Generator = {
     wallParam(2),
     baseParam(3),
     SOLID,
+    ...TEXT,
     RESOLUTION,
   ],
   presets: [
@@ -112,8 +141,8 @@ export const vase: Generator = {
   ],
   build(v) {
     const { num, bool } = reader(v);
-    const { radius, segments, rows, phase } = vesselRadius(v);
-    return buildShell({ height: num('height'), segments, rows, phase, outer: radius, wall: num('wall'), base: num('base'), solid: bool('solid') });
+    const solid = bool('solid');
+    return vessel(v, () => ({ wall: num('wall'), base: num('base'), solid }), solid ? Infinity : num('wall'));
   },
 };
 
@@ -127,6 +156,7 @@ export const planter: Generator = {
     wallParam(2.4),
     baseParam(4),
     { key: 'drain', label: 'Agujero de drenaje (radio)', group: 'Impresión', type: 'range', min: 0, max: 20, step: 0.5, default: 6, unit: 'mm' },
+    ...TEXT,
     RESOLUTION,
   ],
   presets: [
@@ -137,10 +167,7 @@ export const planter: Generator = {
   ],
   build(v) {
     const { num } = reader(v);
-    const { radius, segments, rows, phase } = vesselRadius(v);
-    return buildShell({
-      height: num('height'), segments, rows, phase, outer: radius, wall: num('wall'), base: num('base'), drainHole: num('drain'),
-    });
+    return vessel(v, () => ({ wall: num('wall'), base: num('base'), drainHole: num('drain') }), num('wall'));
   },
 };
 
@@ -153,6 +180,7 @@ export const bowl: Generator = {
     ...STYLE_PARAMS,
     wallParam(2),
     baseParam(3),
+    ...TEXT,
     RESOLUTION,
   ],
   presets: [
@@ -162,8 +190,7 @@ export const bowl: Generator = {
   ],
   build(v) {
     const { num } = reader(v);
-    const { radius, segments, rows, phase } = vesselRadius(v);
-    return buildShell({ height: num('height'), segments, rows, phase, outer: radius, wall: num('wall'), base: num('base') });
+    return vessel(v, () => ({ wall: num('wall'), base: num('base') }), num('wall'));
   },
 };
 
@@ -175,6 +202,7 @@ export const lampshade: Generator = {
     ...shapeParams({ height: [60, 260, 150], radii: [70, 78, 60, 45], maxRadius: 130 }),
     ...STYLE_PARAMS,
     wallParam(1.2),
+    ...TEXT,
     RESOLUTION,
   ],
   presets: [
@@ -184,8 +212,7 @@ export const lampshade: Generator = {
   ],
   build(v) {
     const { num } = reader(v);
-    const { radius, segments, rows, phase } = vesselRadius(v);
-    return buildShell({ height: num('height'), segments, rows, phase, outer: radius, wall: num('wall'), base: 0, openBottom: true });
+    return vessel(v, () => ({ wall: num('wall'), base: 0, openBottom: true }), num('wall'));
   },
 };
 
@@ -208,6 +235,7 @@ export const candleHolder: Generator = {
       ],
     },
     { key: 'cavity', label: 'Profundidad del hueco', group: 'Vela', type: 'range', min: 8, max: 60, step: 1, default: 18, unit: 'mm', fixed: true },
+    ...TEXT,
     RESOLUTION,
   ],
   presets: [
@@ -217,16 +245,43 @@ export const candleHolder: Generator = {
   ],
   build(v) {
     const { num, str } = reader(v);
-    const { radius, segments, rows, phase } = vesselRadius(v);
     const H = num('height');
     const hole = (CANDLES[str('candle')] ?? CANDLES.tealight) / 2 + 0.6; // holgura
     const minOuter = hole + 2;
-    return buildShell({
-      height: H, segments, rows, phase,
-      outer: (t, a) => Math.max(minOuter, radius(t, a)),
-      inner: () => hole,
-      wall: 0,
-      base: Math.max(2, H - num('cavity')),
-    });
+    const t0 = num('textPos');
+    return vessel(
+      v,
+      (shape) => ({
+        outer: (t, a) => Math.max(minOuter, shape.radius(t, a)),
+        inner: () => hole,
+        wall: 0,
+        base: Math.max(2, H - num('cavity')),
+      }),
+      Math.max(0, vesselRadius(v).surface(t0, -Math.PI / 2) - hole),
+    );
+  },
+};
+
+export const pencilCup: Generator = {
+  id: 'pencil',
+  name: 'Portalápices',
+  description: 'Portalápices y organizadores de escritorio.',
+  params: [
+    ...shapeParams({ height: [50, 160, 105], radii: [38, 38, 38, 40], maxRadius: 80 }),
+    ...STYLE_PARAMS,
+    wallParam(2),
+    baseParam(3),
+    ...TEXT,
+    RESOLUTION,
+  ],
+  presets: [
+    { name: 'Hexágono girado', values: { sides: 6, twist: 60, pattern: 'none' } },
+    { name: 'Estriado', values: { sides: 0, twist: 0, pattern: 'ribs', count: 28, depth: 2 } },
+    { name: 'Burbujas', values: { sides: 0, twist: 0, pattern: 'bubbles', count: 10, depth: 2.5 } },
+    { name: 'Con nombre', values: { sides: 0, twist: 0, pattern: 'rings', count: 10, depth: 1, text: 'Lápices', font: 'pacifico', textSize: 12 } },
+  ],
+  build(v) {
+    const { num } = reader(v);
+    return vessel(v, () => ({ wall: num('wall'), base: num('base') }), num('wall'));
   },
 };

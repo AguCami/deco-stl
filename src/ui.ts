@@ -8,6 +8,10 @@ const ICONS: Record<string, string> = {
   lampshade: 'M8 3h8l4 13H4zM12 16v5M9 21h6',
   coaster: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
   panel: 'M3 3h18v18H3zM8 7l3 1.7v3.5L8 14l-3-1.8V8.7zM16 7l3 1.7v3.5L16 14l-3-1.8V8.7zM12 14l3 1.7V19M9 19v-3.3l3-1.7',
+  pencil: 'M6 11h12l-1.2 10H7.2zM9 11V4l1.5 1.5L12 4v7M14.5 11V6l2-1v6',
+  frame: 'M3 4h18v16H3zM7 8h10v8H7zM7 16l3.5-4 2.5 3 1.5-1.5L17 16',
+  hook: 'M5 3h3v18H5zM8 18h5a4 4 0 0 0 4-4v-3',
+  letters: 'M3 19l5-14 5 14M5 14h6M18.5 12a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM21 11.5V19',
 };
 
 export function renderGenerators(root: HTMLElement, gens: Generator[], active: string, onPick: (g: Generator) => void) {
@@ -58,6 +62,17 @@ function control(p: Param, value: Values[string], onChange: (v: Values[string]) 
     const sel = row.querySelector('select')!;
     for (const o of p.options) sel.add(new Option(o.label, o.value, false, o.value === value));
     sel.addEventListener('change', () => onChange(sel.value));
+  } else if (p.type === 'text') {
+    row.innerHTML = `<label for="${id}">${p.label}</label>`;
+    const input = document.createElement(p.multiline ? 'textarea' : 'input');
+    input.id = id;
+    input.maxLength = p.maxLength;
+    input.placeholder = p.placeholder ?? '';
+    input.spellcheck = false;
+    if (input instanceof HTMLTextAreaElement) input.rows = 2;
+    input.value = String(value);
+    input.addEventListener('input', () => onChange(input.value));
+    row.appendChild(input);
   } else {
     row.innerHTML = `
       <div class="field-head">

@@ -1,8 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { GENERATORS } from '../src/generators';
-import { defaults, randomize, sanitize } from '../src/generators/types';
+import { defaults, randomize, sanitize, type Values } from '../src/generators/types';
 import { analyze, type MeshData } from '../src/geometry/mesh';
 import { toBinarySTL } from '../src/export/stl';
+import { setFontReader } from '../src/text/fonts';
+
+beforeAll(() => {
+  // En Node no hay fetch de assets de Vite: leemos las fuentes del disco.
+  setFontReader(async (f) => {
+    const buf = readFileSync(fileURLToPath(new URL(`../src/assets/fonts/${f.file}`, import.meta.url)));
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  });
+});
 
 /** Cada arista dirigida aparece una sola vez y su opuesta también: malla cerrada y orientada. */
 function checkWatertight(mesh: MeshData) {
@@ -30,16 +41,22 @@ function rng(seed: number) {
 }
 
 describe.each(GENERATORS)('$name', (g) => {
-  const cases: [string, Record<string, unknown>][] = [
-    ['por defecto', defaults(g)],
-    ...g.presets.map((p): [string, Record<string, unknown>] => [p.name, { ...defaults(g), ...p.values }]),
+  const base = defaults(g);
+  const cases: [string, Values][] = [
+    ['por defecto', base],
+    ...g.presets.map((p): [string, Values] => [p.name, { ...base, ...p.values }]),
   ];
   const r = rng(g.id.length * 7919);
-  for (let i = 0; i < 4; i++) cases.push([`aleatorio ${i}`, randomize(g, { ...defaults(g), res: g.params.find((p) => p.key === 'res')?.default ?? '' }, r)]);
-  for (const p of g.params) if (p.type === 'toggle') cases.push([`${p.key} activado`, { ...defaults(g), [p.key]: true }]);
+  for (let i = 0; i < 4; i++) cases.push([`aleatorio ${i}`, randomize(g, base, r)]);
+  for (const p of g.params) if (p.type === 'toggle') cases.push([`${p.key} = ${!p.default}`, { ...base, [p.key]: !p.default }]);
+  if (g.params.some((p) => p.key === 'text')) {
+    cases.push(['texto en relieve', { ...base, text: 'Hola ñandú', font: 'righteous' }]);
+    cases.push(['texto grabado', { ...base, text: 'Deco', font: 'bebas', engrave: true }]);
+    cases.push(['texto cursivo', { ...base, text: 'Luna', font: 'pacifico' }]);
+  }
 
-  it.each(cases)('%s → sólido cerrado', (_name, values) => {
-    const mesh = g.build(sanitize(g, values as never));
+  it.each(cases)('%s → sólido cerrado', async (_name, values) => {
+    const mesh = await g.build(sanitize(g, values));
     const { bad, degenerate } = checkWatertight(mesh);
     expect(bad).toBe(0);
     expect(degenerate).toBe(0);
@@ -50,9 +67,31 @@ describe.each(GENERATORS)('$name', (g) => {
   });
 });
 
+describe('imprimible sin soportes', () => {
+  const flat = ['frame', 'letters', 'coaster', 'panel', 'hook'];
+  it.each(GENERATORS.filter((g) => flat.includes(g.id)).flatMap((g) => g.presets.map((p) => [g.name, p.name, g, p.values] as const)))(
+    '%s · %s',
+    async (_g, _p, g, preset) => {
+      const stats = analyze(await g.build(sanitize(g, { ...defaults(g), ...preset })));
+      expect(stats.overhang).toBeLessThan(0.03);
+    },
+  );
+});
+
+describe('texto', () => {
+  it('agrega volumen al jarrón', async () => {
+    const vase = GENERATORS.find((g) => g.id === 'vase')!;
+    const plain = analyze(await vase.build(defaults(vase)));
+    const withText = analyze(await vase.build({ ...defaults(vase), text: 'Flores' }));
+    const engraved = analyze(await vase.build({ ...defaults(vase), text: 'Flores', engrave: true }));
+    expect(withText.volume).toBeGreaterThan(plain.volume);
+    expect(engraved.volume).toBeLessThan(plain.volume);
+  });
+});
+
 describe('STL', () => {
-  it('escribe el tamaño correcto', () => {
-    const mesh = GENERATORS[0].build(defaults(GENERATORS[0]));
+  it('escribe el tamaño correcto', async () => {
+    const mesh = await GENERATORS[0].build(defaults(GENERATORS[0]));
     const buf = toBinarySTL(mesh);
     const count = mesh.indices.length / 3;
     expect(buf.byteLength).toBe(84 + 50 * count);

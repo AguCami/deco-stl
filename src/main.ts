@@ -24,7 +24,8 @@ let gen: Generator = GENERATORS[0];
 let values: Values = defaults(gen);
 let mesh: MeshData | null = null;
 let color = COLORS[0][1];
-let pending = 0;
+let building = false;
+let queued: { reframe: boolean } | null = null;
 
 /** Valores iniciales de un tipo: sus parámetros por defecto con el primer estilo aplicado. */
 const starter = (g: Generator) => sanitize(g, { ...defaults(g), ...g.presets[0]?.values });
@@ -65,15 +66,39 @@ function renderStats(s: MeshStats) {
     ${warnings.map((w) => `<p class="warn">${w}</p>`).join('')}`;
 }
 
-function rebuild(reframe = false) {
-  cancelAnimationFrame(pending);
-  pending = requestAnimationFrame(() => {
-    mesh = gen.build(values);
-    viewer.setMesh(mesh);
+/**
+ * Regenera la pieza. Si ya hay una generación en curso (las que llevan texto
+ * pueden tardar), se encola sólo la última petición.
+ */
+async function rebuild(reframe = false) {
+  if (building) {
+    queued = { reframe: reframe || (queued?.reframe ?? false) };
+    return;
+  }
+  building = true;
+  const stage = $('viewport').parentElement!;
+  const slow = setTimeout(() => stage.classList.add('busy'), 150);
+  try {
+    await new Promise(requestAnimationFrame);
+    const next = await gen.build(values);
+    mesh = next;
+    viewer.setMesh(next);
     if (reframe) viewer.frame();
-    renderStats(analyze(mesh));
+    renderStats(analyze(next));
     writeHash();
-  });
+  } catch (err) {
+    console.error(err);
+    toast($('toast'), 'No se pudo generar con estos valores; probá cambiar alguno.');
+  } finally {
+    clearTimeout(slow);
+    stage.classList.remove('busy');
+    building = false;
+    if (queued) {
+      const q = queued;
+      queued = null;
+      void rebuild(q.reframe);
+    }
+  }
 }
 
 function renderForm() {
